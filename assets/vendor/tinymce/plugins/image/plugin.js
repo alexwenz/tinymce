@@ -1,5 +1,5 @@
 /**
- * TinyMCE version 8.4.0 (2026-03-31)
+ * TinyMCE version 8.10.2 (2026-11-11)
  */
 
 (function () {
@@ -462,6 +462,20 @@
         element.dom.removeAttribute(key);
     };
 
+    const getImageSize = (url) => new Promise((resolve, reject) => {
+        const img = document.createElement('img');
+        img.addEventListener('load', () => {
+            resolve({
+                width: img.naturalWidth,
+                height: img.naturalHeight
+            });
+        });
+        img.addEventListener('error', () => {
+            reject(`Failed to get image dimensions for: ${url}`);
+        });
+        img.src = url;
+    });
+
     var global$3 = tinymce.util.Tools.resolve('tinymce.dom.DOMUtils');
 
     var global$2 = tinymce.util.Tools.resolve('tinymce.util.URI');
@@ -522,33 +536,6 @@
     const hasUploadUrl = (editor) => isNotEmpty(editor.options.get('images_upload_url'));
     const hasUploadHandler = (editor) => isNonNullable(editor.options.get('images_upload_handler'));
 
-    // TODO: Figure out if these would ever be something other than numbers. This was added in: #TINY-1350
-    const parseIntAndGetMax = (val1, val2) => Math.max(parseInt(val1, 10), parseInt(val2, 10));
-    const getImageSize = (url) => new Promise((callback) => {
-        const img = document.createElement('img');
-        const done = (dimensions) => {
-            if (img.parentNode) {
-                img.parentNode.removeChild(img);
-            }
-            callback(dimensions);
-        };
-        img.addEventListener('load', () => {
-            const width = parseIntAndGetMax(img.width, img.clientWidth);
-            const height = parseIntAndGetMax(img.height, img.clientHeight);
-            const dimensions = { width, height };
-            done(Promise.resolve(dimensions));
-        });
-        img.addEventListener('error', () => {
-            done(Promise.reject(`Failed to get image dimensions for: ${url}`));
-        });
-        const style = img.style;
-        style.visibility = 'hidden';
-        style.position = 'fixed';
-        style.bottom = style.left = '0px';
-        style.width = style.height = 'auto';
-        document.body.appendChild(img);
-        img.src = url;
-    });
     const removePixelSuffix = (value) => {
         if (value) {
             value = value.replace(/px$/, '');
@@ -1447,26 +1434,28 @@
                 changeSrc(helpers, info, state, api);
                 api.focus('src');
             };
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            blobToDataUri(file).then((dataUrl) => {
-                const blobInfo = helpers.createBlobCache(file, blobUri, dataUrl);
+            const handleError = (err) => {
+                finalize();
+                info.alertErr(err, () => {
+                    api.focus('fileinput');
+                });
+            };
+            blobToDataUri(file)
+                .then((dataUrl) => helpers.createBlobCache(file, blobUri, dataUrl))
+                .then((blobInfo) => {
                 if (info.automaticUploads) {
                     helpers.uploadImage(blobInfo).then((result) => {
                         updateSrcAndSwitchTab(result.url);
                         finalize();
-                    }).catch((err) => {
-                        finalize();
-                        info.alertErr(err, () => {
-                            api.focus('fileinput');
-                        });
-                    });
+                    }).catch(handleError);
                 }
                 else {
                     helpers.addToBlobCache(blobInfo);
                     updateSrcAndSwitchTab(blobInfo.blobUri());
                     api.unblock();
                 }
-            });
+            })
+                .catch(() => handleError('Failed to upload image'));
         });
     };
     const changeHandler = (helpers, info, state) => (api, evt) => {
@@ -1515,6 +1504,7 @@
         // Since the style field was removed that process must be simulated on submit.
         const finalData = {
             ...data,
+            isDecorative: info.hasAccessibilityOptions && data.isDecorative,
             style: getStyleValue(helpers.normalizeCss, toImageData(data, false))
         };
         editor.execCommand('mceUpdateImage', false, toImageData(finalData, info.hasAccessibilityOptions));
@@ -1673,12 +1663,16 @@
         });
     };
 
+    const PLUGIN_CODE = 'image';
     var Plugin = () => {
-        global$4.add('image', (editor) => {
+        global$4.add(PLUGIN_CODE, (editor) => {
             register$2(editor);
             setup(editor);
             register(editor);
             register$1(editor);
+            return {
+                getMetadata: () => ({ name: 'Image', type: 'opensource', slug: PLUGIN_CODE })
+            };
         });
     };
 
