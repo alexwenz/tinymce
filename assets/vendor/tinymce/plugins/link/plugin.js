@@ -1,5 +1,5 @@
 /**
- * TinyMCE version 8.4.0 (2026-03-31)
+ * TinyMCE version 8.10.2 (2026-11-11)
  */
 
 (function () {
@@ -1442,12 +1442,21 @@
     const hasOnlyAltModifier = (e) => {
         return e.altKey === true && e.shiftKey === false && e.ctrlKey === false && e.metaKey === false;
     };
+    const openEnclosingDetails = (editor, target) => {
+        each$1(editor.dom.getParents(target.parentNode, 'details', editor.getBody()), (details) => {
+            if (!details.querySelector(':scope > summary')?.contains(target)) {
+                details.setAttribute('open', 'open');
+            }
+        });
+    };
     const gotoLink = (editor, a) => {
         if (a) {
             const href = getHref(a);
             if (/^#/.test(href)) {
-                const targetEl = editor.dom.select(`${href},[name="${removeLeading(href, '#')}"]`);
+                const id = removeLeading(href, '#');
+                const targetEl = editor.dom.select(`[id="${id}"],[name="${id}"]`);
                 if (targetEl.length) {
+                    openEnclosingDetails(editor, targetEl[0]);
                     editor.selection.scrollIntoView(targetEl[0], true);
                 }
             }
@@ -1692,12 +1701,16 @@
         setupContextToolbars(editor, openLink);
     };
 
+    const PLUGIN_CODE = 'link';
     var Plugin = () => {
-        global$5.add('link', (editor) => {
+        global$5.add(PLUGIN_CODE, (editor) => {
             register$1(editor);
             register(editor);
             setup(editor);
             setup$2(editor);
+            return {
+                getMetadata: () => ({ name: 'Link', type: 'opensource', slug: PLUGIN_CODE })
+            };
         });
     };
 
